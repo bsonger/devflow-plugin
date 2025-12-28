@@ -1,7 +1,7 @@
 # -----------------------------
 # Stage 1: Build Go plugin
 # -----------------------------
-FROM golang:1.24.6-alpine AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/devflow/golang:1.25 AS builder
 
 # 安装必要工具
 RUN apk add --no-cache git bash ca-certificates
