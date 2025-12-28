@@ -24,7 +24,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o devflow-plugin main.go
 FROM quay.io/argoproj/argocd:v2.12.4
 USER root
 # 创建插件目录
-RUN mkdir -p /home/argocd/cmp-server/plugins
+RUN mkdir -p /home/argocd/cmp-server/plugins && \
+    chown -R 999:999 /home/argocd/cmp-server/plugins
 
 # 拷贝插件二进制
 COPY --from=builder /workspace/devflow-plugin /home/argocd/cmp-server/plugins/devflow-plugin
