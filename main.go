@@ -22,7 +22,6 @@ func main() {
 	internet := flag.String("internet", "internal", "internet type: internal/external")
 	env := flag.String("env", "devflow-plugin", "env type: devflow-plugin")
 	flag.Parse()
-
 	repoURL := flag.String("repoURL", "", "release.yaml github raw URL")
 
 	// clone 仓库到本地 path，如果已存在则 pull
