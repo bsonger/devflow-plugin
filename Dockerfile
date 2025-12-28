@@ -5,7 +5,7 @@ FROM golang:1.24.6-alpine AS builder
 
 # 安装必要工具
 RUN apk add --no-cache git bash ca-certificates
-
+ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /workspace
 
 # 下载依赖
