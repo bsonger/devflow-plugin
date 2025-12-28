@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o devflow-plugin main.go
 # Stage 2: Sidecar 镜像
 # -----------------------------
 FROM quay.io/argoproj/argocd:v2.12.4
-
+USER root
 # 创建插件目录
 RUN mkdir -p /home/argocd/cmp-server/plugins
 
