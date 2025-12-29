@@ -52,7 +52,7 @@ func main() {
 
 	// 合并 CLI 参数覆盖 YAML 中的字段
 	release.Type = model.ReleaseType(*releaseType)
-	release.Replica = ptr.To[int32](int32(*replica))
+	release.Replica = ptr.To[int32](int32(replica))
 	release.Internet = model.Internet(*internet)
 	release.Env = *env
 	ConfigYAML, err := render.ConfigMap(&release, appPath)
