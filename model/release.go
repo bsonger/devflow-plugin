@@ -21,7 +21,7 @@ type Release struct {
 	App      `yaml:"app"`
 	Image    `yaml:"image"`
 	Configs  []Config `yaml:"configs"`
-	Service  []Port   `yaml:"service"`
+	Service  Service  `yaml:"service"`
 	Env      string   `yaml:"env"`
 }
 
@@ -39,6 +39,10 @@ type Config struct {
 	Name      string            `yaml:"name"`
 	MountPath string            `yaml:"mountPath"`
 	FilesPath map[string]string `yaml:"filesPath"`
+}
+
+type Service struct {
+	Ports []Port `yaml:"ports"`
 }
 
 type Port struct {

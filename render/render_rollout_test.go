@@ -34,7 +34,7 @@ func TestRenderRollout_Canary(t *testing.T) {
 		},
 	}
 
-	yml, err := render.RenderRollout(release)
+	yml, err := render.Rollout(release)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, yml)
 	t.Log(yml)

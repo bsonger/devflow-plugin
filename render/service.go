@@ -1,23 +1,23 @@
 package render
 
 import (
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/yaml"
 
 	"github.com/bsonger/devflow-plugin/model"
 )
 
-// RenderService 根据 Release 渲染 Service YAML
-func RenderService(c *model.Release) (string, error) {
-	if len(c.Service) == 0 {
+// Service 根据 Release 渲染 Service YAML
+func Service(c *model.Release) (string, error) {
+	if len(c.Service.Ports) == 0 {
 		return "", nil // 没有 service 配置，直接返回空
 	}
 
 	var ports []corev1.ServicePort
 
-	for _, p := range c.Service {
+	for _, p := range c.Service.Ports {
 		ports = append(ports, corev1.ServicePort{
 			Name:       p.Name,
 			Port:       int32(p.Port),
@@ -62,12 +62,12 @@ func intstrFromInt(i int) intstr.IntOrString {
 	}
 }
 
-func RenderServiceBlueGreen(r *model.Release, role string) (string, error) {
+func BlueGreen(r *model.Release, role string) (string, error) {
 
 	name := r.App.Name + "-" + role
 
 	var ports []corev1.ServicePort
-	for _, p := range r.Service {
+	for _, p := range r.Service.Ports {
 		ports = append(ports, corev1.ServicePort{
 			Name:       p.Name,
 			Port:       int32(p.Port),

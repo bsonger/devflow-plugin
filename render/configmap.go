@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"github.com/bsonger/devflow-plugin/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,12 +9,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func RenderConfigMap(c *model.Release) (string, error) {
+func ConfigMap(c *model.Release, baseDir string) (string, error) {
 	// 1️⃣ Argo CD clone 后的 repo 根目录
-	appPath := os.Getenv("ARGOCD_APP_SOURCE_PATH")
-	if appPath == "" {
-		return "", fmt.Errorf("ARGOCD_APP_SOURCE_PATH not set")
-	}
 
 	data := make(map[string]string)
 
@@ -26,7 +21,7 @@ func RenderConfigMap(c *model.Release) (string, error) {
 			continue
 		}
 
-		absDir := filepath.Join(appPath, dir)
+		absDir := filepath.Join(baseDir, dir)
 
 		err := filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {

@@ -2,14 +2,14 @@ package render
 
 import (
 	"github.com/bsonger/devflow-plugin/model"
-	"gopkg.in/yaml.v3"
 	v1alpha3 "istio.io/api/networking/v1alpha3"
 	networkingv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
-// RenderVirtualService 根据 ReleaseContent 生成 VirtualService YAML
-func RenderVirtualService(c *model.Release) (string, error) {
+// VirtualService 根据 ReleaseContent 生成 VirtualService YAML
+func VirtualService(c *model.Release) (string, error) {
 	// 内部流量不需要 VirtualService
 	if c.Internet == model.Internal {
 		return "", nil

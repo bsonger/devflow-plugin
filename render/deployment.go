@@ -2,13 +2,13 @@ package render
 
 import (
 	"github.com/bsonger/devflow-plugin/model"
-	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
-// RenderDeployment 生成 Deployment YAML，用于普通部署（RollingUpdate）
-func RenderDeployment(c *model.Release) (string, error) {
+// Deployment 生成 Deployment YAML，用于普通部署（RollingUpdate）
+func Deployment(c *model.Release) (string, error) {
 
 	deploy := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{

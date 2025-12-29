@@ -3,52 +3,53 @@ package main
 import (
 	"flag"
 	"fmt"
-	"k8s.io/utils/ptr"
-	"log"
-	"os"
-	"os/exec"
-
 	"github.com/bsonger/devflow-plugin/model"
 	"github.com/bsonger/devflow-plugin/render"
+	"gopkg.in/yaml.v3"
+	"io/ioutil"
+	"k8s.io/utils/ptr"
+	"log"
+	"path/filepath"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: ./plugin <release.yaml>")
-	}
 
 	releaseType := flag.String("type", "normal", "release type: normal/canary/bluegreen")
 	replica := flag.Int("replica", 1, "replica count")
 	internet := flag.String("internet", "internal", "internet type: internal/external")
 	env := flag.String("env", "devflow-plugin", "env type: devflow-plugin")
+	repoURL := flag.String("repoUrl", "", "release.yaml github raw URL")
+	path := flag.String("path", ".", "subpath in repo where release.yaml exists")
+
 	flag.Parse()
-	repoURL := flag.String("repoURL", "", "release.yaml github raw URL")
 
-	// clone 仓库到本地 path，如果已存在则 pull
-	appPath := os.Getenv("ARGOCD_APP_SOURCE_PATH")
-	if appPath == "" {
-		fmt.Errorf("ARGOCD_APP_SOURCE_PATH not set")
-	}
-	if _, err := os.Stat(appPath); os.IsNotExist(err) {
-		cmd := exec.Command("git", "clone", *repoURL, appPath)
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("failed to git clone: %v", err)
-		}
-	} else {
-		cmd := exec.Command("git", "-C", appPath, "pull")
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("failed to git pull: %v", err)
-		}
+	// git clone / pull 仓库
+	baseDir := filepath.Join("/tmp", render.RepoDirName(*repoURL))
+	if err := render.GitCloneOrPull(*repoURL, "main", baseDir); err != nil {
+		log.Fatalf("git clone/pull failed: %v", err)
 	}
 
-	release := model.Release{
-		Type:     model.ReleaseType(*releaseType),
-		Replica:  ptr.To(int32(*replica)),
-		Internet: model.Internet(*internet),
-		Env:      *env,
+	// 拼接 release.yaml 的完整路径
+	appPath := filepath.Join(baseDir, *path)
+	releaseFile := filepath.Join(appPath, "release.yaml")
+
+	// 读取 release.yaml 文件
+	data, err := ioutil.ReadFile(releaseFile)
+	if err != nil {
+		log.Fatalf("failed to read release.yaml: %v", err)
 	}
 
-	ConfigYAML, err := render.RenderConfigMap(&release)
+	var release model.Release
+	if err := yaml.Unmarshal(data, &release); err != nil {
+		log.Fatalf("failed to unmarshal release.yaml: %v", err)
+	}
+
+	// 合并 CLI 参数覆盖 YAML 中的字段
+	release.Type = model.ReleaseType(*releaseType)
+	release.Replica = ptr.To[int32](int32(*replica))
+	release.Internet = model.Internet(*internet)
+	release.Env = *env
+	ConfigYAML, err := render.ConfigMap(&release, appPath)
 	if err != nil {
 		log.Fatalf("RenderConfigmap failed: %v", err)
 	}
@@ -58,14 +59,14 @@ func main() {
 	switch release.Type {
 	case model.Normal:
 		// 普通部署和灰度都生成一个 Service
-		svcYAML, err := render.RenderService(&release)
+		svcYAML, err := render.Service(&release)
 		if err != nil {
-			log.Fatalf("RenderService failed: %v", err)
+			log.Fatalf("Service failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		deployYAML, err := render.RenderDeployment(&release)
+		deployYAML, err := render.Deployment(&release)
 		if err != nil {
 			log.Fatalf("RenderDeploy failed: %v", err)
 		}
@@ -73,38 +74,38 @@ func main() {
 		fmt.Println(deployYAML)
 
 	case model.Canary:
-		svcYAML, err := render.RenderService(&release)
+		svcYAML, err := render.Service(&release)
 		if err != nil {
-			log.Fatalf("RenderService failed: %v", err)
+			log.Fatalf("Service failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		rolloutYAML, err := render.RenderRollout(&release)
+		rolloutYAML, err := render.Rollout(&release)
 		if err != nil {
-			log.Fatalf("RenderRollout failed: %v", err)
+			log.Fatalf("Rollout failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(rolloutYAML)
 
 	case model.BlueGreen:
 		// 蓝绿发布生成两个 Service：active 和 preview
-		activeSvcYAML, err := render.RenderServiceBlueGreen(&release, "active")
+		activeSvcYAML, err := render.BlueGreen(&release, "active")
 		if err != nil {
-			log.Fatalf("RenderService active failed: %v", err)
+			log.Fatalf("Service active failed: %v", err)
 		}
-		previewSvcYAML, err := render.RenderServiceBlueGreen(&release, "preview")
+		previewSvcYAML, err := render.BlueGreen(&release, "preview")
 		if err != nil {
-			log.Fatalf("RenderService preview failed: %v", err)
+			log.Fatalf("Service preview failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(activeSvcYAML)
 		fmt.Println("---")
 		fmt.Println(previewSvcYAML)
 
-		rolloutYAML, err := render.RenderRollout(&release)
+		rolloutYAML, err := render.Rollout(&release)
 		if err != nil {
-			log.Fatalf("RenderRollout failed: %v", err)
+			log.Fatalf("Rollout failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(rolloutYAML)
@@ -114,9 +115,9 @@ func main() {
 	// 3️⃣ 外网生成 VirtualService（仅 Canary / BlueGreen）
 	// -----------------------------
 	if release.Internet == model.External {
-		vsYAML, err := render.RenderVirtualService(&release)
+		vsYAML, err := render.VirtualService(&release)
 		if err != nil {
-			log.Fatalf("RenderVirtualService failed: %v", err)
+			log.Fatalf("VirtualService failed: %v", err)
 		}
 		if vsYAML != "" {
 			fmt.Println("---")

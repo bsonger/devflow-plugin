@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func RenderRollout(c *model.Release) (string, error) {
+func Rollout(c *model.Release) (string, error) {
 	rollout := &rolloutv1alpha1.Rollout{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
