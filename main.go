@@ -10,18 +10,24 @@ import (
 	"k8s.io/utils/ptr"
 	"log"
 	"path/filepath"
+	"strconv"
 )
 
 func main() {
 
 	releaseType := flag.String("type", "normal", "release type: normal/canary/bluegreen")
-	replica := flag.Int("replica", 1, "replica count")
+	replicaStr := flag.String("replica", "1", "replica count")
 	internet := flag.String("internet", "internal", "internet type: internal/external")
 	env := flag.String("env", "devflow-plugin", "env type: devflow-plugin")
 	repoURL := flag.String("repoUrl", "", "release.yaml github raw URL")
 	path := flag.String("path", ".", "subpath in repo where release.yaml exists")
 
 	flag.Parse()
+
+	replica, err := strconv.Atoi(*replicaStr)
+	if err != nil {
+		log.Fatalf("invalid replica: %v", err)
+	}
 
 	// git clone / pull 仓库
 	baseDir := filepath.Join("/tmp", render.RepoDirName(*repoURL))
