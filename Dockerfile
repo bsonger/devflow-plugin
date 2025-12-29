@@ -17,22 +17,18 @@ COPY . .
 
 # 编译插件二进制
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o devflow-plugin main.go
+RUN chmod +x devflow-plugin
 
 # -----------------------------
 # Stage 2: Sidecar 镜像
 # -----------------------------
 FROM quay.io/argoproj/argocd:v2.12.4
-USER root
-# 创建插件目录
-RUN mkdir -p /home/argocd/cmp-server/plugins && \
-    chown -R 999:999 /home/argocd/cmp-server/plugins
 
 # 拷贝插件二进制
-COPY --from=builder /workspace/devflow-plugin /home/argocd/cmp-server/plugins/devflow-plugin
-RUN chmod +x /home/argocd/cmp-server/plugins/devflow-plugin
+COPY --from=builder /workspace/devflow-plugin /home/argocd/devflow-plugin
 
 # 工作目录
-WORKDIR /app
+WORKDIR /home/argocd
 
 # 默认 CMD，必须保持官方 repo-server 启动入口
 CMD ["/var/run/argocd/argocd-cmp-server"]
