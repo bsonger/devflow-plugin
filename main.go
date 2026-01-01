@@ -17,7 +17,8 @@ func main() {
 	devflowAddress := os.Getenv("PARAM_DEVFLOW_ADDRESS") // 修改名称
 	consulAddress := os.Getenv("PARAM_CONSUL_ADDRESS")   // 新增 Consul 地址
 
-	log.Printf("manifestID=%s, env=%s, devflowAPI=%s\n", manifestID, env, devflowAddress)
+	log.Printf("manifestID=%s, env=%s, devflowAddress=%s, consulAddress=%s\n",
+		manifestID, env, devflowAddress, consulAddress)
 
 	if manifestID == "" {
 		log.Fatalf("manifest-id is required")
