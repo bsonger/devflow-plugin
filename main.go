@@ -2,34 +2,34 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"github.com/bsonger/devflow-common/model"
 	"github.com/bsonger/devflow-plugin/render"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
 
-	manifestID := flag.String("manifest-id", "", "release id from devflow")
-	env := flag.String("env", "prod", "env name")
-	devflowAPI := flag.String("devflow-api", "http://devflow-api:8080", "devflow api address")
+	manifestID := os.Getenv("ARGOCD_PLUGIN_MANIFEST_ID")
+	env := os.Getenv("ARGOCD_PLUGIN_ENV")
+	devflowAPI := os.Getenv("ARGOCD_PLUGIN_DEVFLOW_API")
 
-	flag.Parse()
+	log.Printf("manifestID=%s, env=%s, devflowAPI=%s\n", manifestID, env, devflowAPI)
 
-	if *manifestID == "" {
-		log.Fatalf("manifest_id is required")
+	if manifestID == "" {
+		log.Fatalf("manifest-id is required")
 		return
 	}
 
-	manifest, err := FetchRelease(*devflowAPI, *manifestID)
+	manifest, err := FetchRelease(devflowAPI, manifestID)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	ConfigYAML, err := render.ConfigMap(manifest, *env)
+	ConfigYAML, err := render.ConfigMap(manifest, env)
 	if err != nil {
 		log.Fatalf("RenderConfigmap failed: %v", err)
 	}
@@ -46,7 +46,7 @@ func main() {
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		deployYAML, err := render.Deployment(manifest, *env)
+		deployYAML, err := render.Deployment(manifest, env)
 		if err != nil {
 			log.Fatalf("RenderDeploy failed: %v", err)
 		}
@@ -61,7 +61,7 @@ func main() {
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		rolloutYAML, err := render.Rollout(manifest, *env)
+		rolloutYAML, err := render.Rollout(manifest, env)
 		if err != nil {
 			log.Fatalf("Rollout failed: %v", err)
 		}
@@ -83,7 +83,7 @@ func main() {
 		fmt.Println("---")
 		fmt.Println(previewSvcYAML)
 
-		rolloutYAML, err := render.Rollout(manifest, *env)
+		rolloutYAML, err := render.Rollout(manifest, env)
 		if err != nil {
 			log.Fatalf("Rollout failed: %v", err)
 		}
