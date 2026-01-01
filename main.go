@@ -12,9 +12,9 @@ import (
 
 func main() {
 
-	manifestID := os.Getenv("ARGOCD_PLUGIN_MANIFEST_ID")
-	env := os.Getenv("ARGOCD_PLUGIN_ENV")
-	devflowAPI := os.Getenv("ARGOCD_PLUGIN_DEVFLOW_API")
+	manifestID := os.Getenv("PARAM_MANIFEST_ID")
+	env := os.Getenv("PARAM_ENV")
+	devflowAPI := os.Getenv("PARAM_DEVFLOW_API")
 
 	log.Printf("manifestID=%s, env=%s, devflowAPI=%s\n", manifestID, env, devflowAPI)
 
