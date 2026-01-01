@@ -12,9 +12,9 @@ import (
 	"strings"
 )
 
-func ConfigMap(m *model.Manifest, env string) (string, error) {
+func ConfigMap(m *model.Manifest, env string, consulAddress string) (string, error) {
 	cfg := api.DefaultConfig()
-	cfg.Address = "https://consul.bei.com:30000"
+	cfg.Address = consulAddress
 
 	client, err := api.NewClient(cfg)
 	if err != nil {
