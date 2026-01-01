@@ -1,7 +1,7 @@
 package render
 
 import (
-	"github.com/bsonger/devflow-plugin/model"
+	"github.com/bsonger/devflow-common/model"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
@@ -10,39 +10,42 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Rollout(c *model.Release) (string, error) {
+// Rollout 根据 Manifest 和环境生成 Argo Rollout YAML
+func Rollout(m *model.Manifest, env string) (string, error) {
 	rollout := &rolloutv1alpha1.Rollout{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "argoproj.io/v1alpha1",
 			Kind:       "Rollout",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.App.Name,
-			Namespace: c.App.Namespace,
+			Name: m.ApplicationName + "-" + env,
 			Labels: map[string]string{
-				"app": c.App.Name,
+				"app":  m.ApplicationName,
+				"env":  env,
+				"type": string(m.Type),
 			},
 		},
 		Spec: rolloutv1alpha1.RolloutSpec{
-			Replicas:             c.Replica,
+			Replicas:             m.Replica,
 			RevisionHistoryLimit: ptr.To(int32(10)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": c.App.Name,
+					"app": m.ApplicationName,
+					"env": env,
 				},
 			},
-			Template: buildPodTemplate(c),
+			Template: buildPodTemplate(m, env),
 		},
 	}
 
-	// 🔥 关键：根据发布类型选择 Strategy
-	switch c.Type {
+	// 根据 ReleaseType 选择 Rollout Strategy
+	switch m.Type {
 	case model.Canary:
-		rollout.Spec.Strategy = buildCanaryStrategy(c)
+		rollout.Spec.Strategy = buildCanaryStrategy(m, env)
 	case model.BlueGreen:
-		rollout.Spec.Strategy = buildBlueGreenStrategy(c) // 你下一步要写的
+		rollout.Spec.Strategy = buildBlueGreenStrategy(m, env)
 	default:
-		// normal 可以直接 Deployment 或 RollingUpdate
+		// normal: 不设置 Strategy，默认 RollingUpdate
 	}
 
 	out, err := yaml.Marshal(rollout)
@@ -52,32 +55,35 @@ func Rollout(c *model.Release) (string, error) {
 	return string(out), nil
 }
 
-func buildCanaryStrategy(c *model.Release) rolloutv1alpha1.RolloutStrategy {
+func buildCanaryStrategy(m *model.Manifest, env string) rolloutv1alpha1.RolloutStrategy {
+	// 固定 Canary 流程示例
+	steps := []rolloutv1alpha1.CanaryStep{
+		{SetWeight: ptr.To(int32(20))}, // 先发 20%
+		{
+			Pause: &rolloutv1alpha1.RolloutPause{
+				Duration: ptr.To(intstr.FromInt(30)), // pause 30s
+			},
+		},
+		{SetWeight: ptr.To(int32(50))}, // 升级到 50%
+		{
+			Pause: &rolloutv1alpha1.RolloutPause{
+				Duration: ptr.To(intstr.FromInt(60)), // pause 60s
+			},
+		},
+		{SetWeight: ptr.To(int32(100))}, // 完全发布
+	}
+
 	return rolloutv1alpha1.RolloutStrategy{
 		Canary: &rolloutv1alpha1.CanaryStrategy{
-			Steps: []rolloutv1alpha1.CanaryStep{
-				{SetWeight: ptr.To(int32(20))},
-				{
-					Pause: &rolloutv1alpha1.RolloutPause{
-						Duration: ptr.To(intstr.FromInt(30)),
-					},
-				},
-				{SetWeight: ptr.To(int32(50))},
-				{
-					Pause: &rolloutv1alpha1.RolloutPause{
-						Duration: ptr.To(intstr.FromInt(60)),
-					},
-				},
-				{SetWeight: ptr.To(int32(100))},
-			},
+			Steps: steps,
 			TrafficRouting: &rolloutv1alpha1.RolloutTrafficRouting{
 				Istio: &rolloutv1alpha1.IstioTrafficRouting{
 					VirtualService: &rolloutv1alpha1.IstioVirtualService{
-						Name:   c.App.Name,
+						Name:   m.ApplicationName,
 						Routes: []string{"primary"},
 					},
 					DestinationRule: &rolloutv1alpha1.IstioDestinationRule{
-						Name:             c.App.Name,
+						Name:             m.ApplicationName,
 						CanarySubsetName: "canary",
 						StableSubsetName: "stable",
 					},
@@ -87,12 +93,12 @@ func buildCanaryStrategy(c *model.Release) rolloutv1alpha1.RolloutStrategy {
 	}
 }
 
-func buildBlueGreenStrategy(c *model.Release) rolloutv1alpha1.RolloutStrategy {
-	activeSvc := c.App.Name + "-active"
-	previewSvc := c.App.Name + "-preview"
+func buildBlueGreenStrategy(m *model.Manifest, env string) rolloutv1alpha1.RolloutStrategy {
+	activeSvc := m.ApplicationName + "-active"
+	previewSvc := m.ApplicationName + "-preview"
 
 	autoPromote := false
-	if c.Internet == model.Internal {
+	if m.Internet == model.Internal {
 		autoPromote = true
 	}
 

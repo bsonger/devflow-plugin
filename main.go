@@ -1,78 +1,52 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/bsonger/devflow-plugin/model"
+	"github.com/bsonger/devflow-common/model"
 	"github.com/bsonger/devflow-plugin/render"
-	"gopkg.in/yaml.v3"
-	"io/ioutil"
-	"k8s.io/utils/ptr"
 	"log"
-	"path/filepath"
-	"strconv"
+	"net/http"
 )
 
 func main() {
 
-	releaseType := flag.String("type", "normal", "release type: normal/canary/bluegreen")
-	replicaStr := flag.String("replica", "1", "replica count")
-	internet := flag.String("internet", "internal", "internet type: internal/external")
-	env := flag.String("env", "devflow-plugin", "env type: devflow-plugin")
-	repoURL := flag.String("repoUrl", "", "release.yaml github raw URL")
-	path := flag.String("path", ".", "subpath in repo where release.yaml exists")
+	manifestID := flag.String("manifest-id", "", "release id from devflow")
+	env := flag.String("env", "prod", "env name")
+	devflowAPI := flag.String("devflow-api", "http://devflow-api:8080", "devflow api address")
 
 	flag.Parse()
 
-	replica, err := strconv.Atoi(*replicaStr)
+	if *manifestID == "" {
+		log.Fatalf("manifest_id is required")
+		return
+	}
+
+	manifest, err := FetchRelease(*devflowAPI, *manifestID)
 	if err != nil {
-		log.Fatalf("invalid replica: %v", err)
+		log.Fatal(err)
+		return
 	}
 
-	// git clone / pull 仓库
-	baseDir := filepath.Join("/tmp", render.RepoDirName(*repoURL))
-	if err := render.GitCloneOrPull(*repoURL, "main", baseDir); err != nil {
-		log.Fatalf("git clone/pull failed: %v", err)
-	}
-
-	// 拼接 release.yaml 的完整路径
-	appPath := filepath.Join(baseDir, *path)
-	releaseFile := filepath.Join(appPath, "release.yaml")
-
-	// 读取 release.yaml 文件
-	data, err := ioutil.ReadFile(releaseFile)
-	if err != nil {
-		log.Fatalf("failed to read release.yaml: %v", err)
-	}
-
-	var release model.Release
-	if err := yaml.Unmarshal(data, &release); err != nil {
-		log.Fatalf("failed to unmarshal release.yaml: %v", err)
-	}
-
-	// 合并 CLI 参数覆盖 YAML 中的字段
-	release.Type = model.ReleaseType(*releaseType)
-	release.Replica = ptr.To[int32](int32(replica))
-	release.Internet = model.Internet(*internet)
-	release.Env = *env
-	ConfigYAML, err := render.ConfigMap(&release, appPath)
+	ConfigYAML, err := render.ConfigMap(manifest, *env)
 	if err != nil {
 		log.Fatalf("RenderConfigmap failed: %v", err)
 	}
 	fmt.Println("---")
 	fmt.Println(ConfigYAML)
 
-	switch release.Type {
+	switch manifest.Type {
 	case model.Normal:
 		// 普通部署和灰度都生成一个 Service
-		svcYAML, err := render.Service(&release)
+		svcYAML, err := render.Service(manifest)
 		if err != nil {
 			log.Fatalf("Service failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		deployYAML, err := render.Deployment(&release)
+		deployYAML, err := render.Deployment(manifest, *env)
 		if err != nil {
 			log.Fatalf("RenderDeploy failed: %v", err)
 		}
@@ -80,14 +54,14 @@ func main() {
 		fmt.Println(deployYAML)
 
 	case model.Canary:
-		svcYAML, err := render.Service(&release)
+		svcYAML, err := render.Service(manifest)
 		if err != nil {
 			log.Fatalf("Service failed: %v", err)
 		}
 		fmt.Println("---")
 		fmt.Println(svcYAML)
 
-		rolloutYAML, err := render.Rollout(&release)
+		rolloutYAML, err := render.Rollout(manifest, *env)
 		if err != nil {
 			log.Fatalf("Rollout failed: %v", err)
 		}
@@ -96,11 +70,11 @@ func main() {
 
 	case model.BlueGreen:
 		// 蓝绿发布生成两个 Service：active 和 preview
-		activeSvcYAML, err := render.BlueGreen(&release, "active")
+		activeSvcYAML, err := render.BlueGreen(manifest, "active")
 		if err != nil {
 			log.Fatalf("Service active failed: %v", err)
 		}
-		previewSvcYAML, err := render.BlueGreen(&release, "preview")
+		previewSvcYAML, err := render.BlueGreen(manifest, "preview")
 		if err != nil {
 			log.Fatalf("Service preview failed: %v", err)
 		}
@@ -109,7 +83,7 @@ func main() {
 		fmt.Println("---")
 		fmt.Println(previewSvcYAML)
 
-		rolloutYAML, err := render.Rollout(&release)
+		rolloutYAML, err := render.Rollout(manifest, *env)
 		if err != nil {
 			log.Fatalf("Rollout failed: %v", err)
 		}
@@ -120,8 +94,8 @@ func main() {
 	// -----------------------------
 	// 3️⃣ 外网生成 VirtualService（仅 Canary / BlueGreen）
 	// -----------------------------
-	if release.Internet == model.External {
-		vsYAML, err := render.VirtualService(&release)
+	if manifest.Internet == model.External {
+		vsYAML, err := render.VirtualService(manifest)
 		if err != nil {
 			log.Fatalf("VirtualService failed: %v", err)
 		}
@@ -130,4 +104,24 @@ func main() {
 			fmt.Println(vsYAML)
 		}
 	}
+}
+
+func FetchRelease(api, manifestID string) (*model.Manifest, error) {
+	url := fmt.Sprintf("%s/api/v1/manifests/%s", api, manifestID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("devflow api error: %s", resp.Status)
+	}
+
+	var manifest model.Manifest
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
 }

@@ -1,14 +1,14 @@
 package render
 
 import (
-	"github.com/bsonger/devflow-plugin/model"
+	"github.com/bsonger/devflow-common/model"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
 // Deployment 生成 Deployment YAML，用于普通部署（RollingUpdate）
-func Deployment(c *model.Release) (string, error) {
+func Deployment(m *model.Manifest, env string) (string, error) {
 
 	deploy := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -16,20 +16,20 @@ func Deployment(c *model.Release) (string, error) {
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.App.Name,
-			Namespace: c.App.Namespace,
+			Name: m.ApplicationName,
+			//Namespace: c.App.Namespace,
 			Labels: map[string]string{
-				"app": c.App.Name,
+				"app": m.ApplicationName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: c.Replica,
+			Replicas: m.Replica,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": c.App.Name,
+					"app": m.ApplicationName,
 				},
 			},
-			Template: buildPodTemplate(c),
+			Template: buildPodTemplate(m, env),
 		},
 	}
 
