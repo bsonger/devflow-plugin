@@ -34,7 +34,7 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-	//manifest.Type = model.Normal
+	//manifest.Type = model.BlueGreen
 	//manifest.Internet = model.Internal
 
 	// -----------------------------

@@ -10,7 +10,7 @@ import (
 
 // DestinationRule 根据 Manifest 生成 DestinationRule YAML
 func DestinationRule(m *model.Manifest, env string) (string, error) {
-	if m.Type == model.Normal {
+	if m.Type != model.Canary {
 		return "", nil
 	}
 	dr := &networkingv1beta1.DestinationRule{

@@ -10,7 +10,7 @@ import (
 )
 
 func VirtualService(m *model.Manifest, env string) (string, error) {
-	if m.Type == model.Normal && m.Internet == model.Internal {
+	if m.Type != model.Canary && m.Internet == model.Internal {
 		return "", nil
 	}
 	vs := &networkingv1beta1.VirtualService{
@@ -76,25 +76,6 @@ func buildHTTPRouteDestinations(m *model.Manifest) []*v1alpha3.HTTPRouteDestinat
 				Destination: &v1alpha3.Destination{
 					Host:   m.ApplicationName,
 					Subset: "canary",
-				},
-				Weight: 0,
-			},
-		}
-
-	case model.BlueGreen:
-		// BlueGreen 使用同一个 Service，通过 subset 区分 blue/green
-		return []*v1alpha3.HTTPRouteDestination{
-			{
-				Destination: &v1alpha3.Destination{
-					Host:   m.ApplicationName,
-					Subset: "blue",
-				},
-				Weight: 100, // 初始全部流量给 active 蓝色
-			},
-			{
-				Destination: &v1alpha3.Destination{
-					Host:   m.ApplicationName,
-					Subset: "green",
 				},
 				Weight: 0,
 			},

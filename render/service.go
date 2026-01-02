@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"github.com/bsonger/devflow-common/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -8,20 +9,51 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Service 根据 Release 渲染 Service YAML（同一个 Service，BlueGreen / Canary / Normal 都用）
+// Service 根据 Release 渲染 Service YAML
+// 蓝绿部署会生成 active + preview 两个 Service，并合并成单一 YAML 输出
 func Service(m *model.Manifest) (string, error) {
 	if len(m.Service.Ports) == 0 {
-		return "", nil // 没有 service 配置，直接返回空
+		return "", nil
 	}
 
-	var ports []corev1.ServicePort
-	for _, p := range m.Service.Ports {
-		ports = append(ports, corev1.ServicePort{
+	out := ""
+
+	// 普通 / Canary / Rolling Update 使用同一个 Service
+	yml, err := buildServiceYAML(m.ApplicationName, m.ApplicationName, nil, m.Service.Ports)
+	if err != nil {
+		return "", err
+	}
+	out += yml + "\n---\n"
+
+	// BlueGreen 额外生成 preview Service
+	if m.Type == model.BlueGreen {
+		previewName := m.ApplicationName + "-preview"
+		labels := map[string]string{"role": "preview"}
+		yml, err := buildServiceYAML(previewName, m.ApplicationName, labels, m.Service.Ports)
+		if err != nil {
+			return "", err
+		}
+		out += yml + "\n---\n"
+	}
+
+	return out, nil
+}
+
+// buildServiceYAML 构建单个 Service 的 YAML
+func buildServiceYAML(name string, selectorApp string, extraSelector map[string]string, ports []model.Port) (string, error) {
+	var servicePorts []corev1.ServicePort
+	for _, p := range ports {
+		servicePorts = append(servicePorts, corev1.ServicePort{
 			Name:       p.Name,
 			Port:       int32(p.Port),
-			TargetPort: intstrFromInt(p.TargetPort),
+			TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: int32(p.TargetPort)},
 			Protocol:   corev1.ProtocolTCP,
 		})
+	}
+
+	selector := map[string]string{"app": selectorApp}
+	for k, v := range extraSelector {
+		selector[k] = v
 	}
 
 	svc := &corev1.Service{
@@ -30,32 +62,19 @@ func Service(m *model.Manifest) (string, error) {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: m.ApplicationName, // ✅ 同一个 Service 名
-			Labels: map[string]string{
-				"app": m.ApplicationName,
-			},
+			Name:   name,
+			Labels: selector,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app": m.ApplicationName,
-				// role 不再用 Service 去区分
-			},
-			Ports: ports,
-			Type:  corev1.ServiceTypeClusterIP,
+			Selector: selector,
+			Ports:    servicePorts,
+			Type:     corev1.ServiceTypeClusterIP,
 		},
 	}
 
 	yml, err := yaml.Marshal(svc)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal service %s failed: %w", name, err)
 	}
 	return string(yml), nil
-}
-
-// intstrFromInt 辅助函数
-func intstrFromInt(i int) intstr.IntOrString {
-	return intstr.IntOrString{
-		Type:   intstr.Int,
-		IntVal: int32(i),
-	}
 }
