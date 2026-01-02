@@ -8,14 +8,18 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func main() {
-
 	manifestID := os.Getenv("PARAM_MANIFEST_ID")
 	env := os.Getenv("PARAM_ENV")
 	devflowAddress := os.Getenv("PARAM_DEVFLOW_ADDRESS") // 修改名称
 	consulAddress := os.Getenv("PARAM_CONSUL_ADDRESS")   // 新增 Consul 地址
+	//manifestID := "695662a486f12d0b5986d818"
+	//env := "prod"
+	//devflowAddress := "https://devflow.bei.com:30000"
+	//consulAddress := "https://consul.bei.com:30000"
 
 	log.Printf("manifestID=%s, env=%s, devflowAddress=%s, consulAddress=%s\n",
 		manifestID, env, devflowAddress, consulAddress)
@@ -30,7 +34,12 @@ func main() {
 		log.Fatal(err)
 		return
 	}
+	manifest.Type = model.Normal
+	//manifest.Internet = model.Internal
 
+	// -----------------------------
+	// 1️⃣ ConfigMap
+	// -----------------------------
 	ConfigYAML, err := render.ConfigMap(manifest, env, consulAddress)
 	if err != nil {
 		log.Fatalf("RenderConfigmap failed: %v", err)
@@ -38,16 +47,18 @@ func main() {
 	fmt.Println("---")
 	fmt.Println(ConfigYAML)
 
+	// -----------------------------
+	// 2️⃣ Service & Rollout/Deployment
+	// -----------------------------
+	svcYAML, err := render.Service(manifest)
+	if err != nil {
+		log.Fatalf("Service failed: %v", err)
+	}
+	fmt.Println("---")
+	fmt.Println(svcYAML)
+
 	switch manifest.Type {
 	case model.Normal:
-		// 普通部署和灰度都生成一个 Service
-		svcYAML, err := render.Service(manifest)
-		if err != nil {
-			log.Fatalf("Service failed: %v", err)
-		}
-		fmt.Println("---")
-		fmt.Println(svcYAML)
-
 		deployYAML, err := render.Deployment(manifest, env)
 		if err != nil {
 			log.Fatalf("RenderDeploy failed: %v", err)
@@ -55,36 +66,7 @@ func main() {
 		fmt.Println("---")
 		fmt.Println(deployYAML)
 
-	case model.Canary:
-		svcYAML, err := render.Service(manifest)
-		if err != nil {
-			log.Fatalf("Service failed: %v", err)
-		}
-		fmt.Println("---")
-		fmt.Println(svcYAML)
-
-		rolloutYAML, err := render.Rollout(manifest, env)
-		if err != nil {
-			log.Fatalf("Rollout failed: %v", err)
-		}
-		fmt.Println("---")
-		fmt.Println(rolloutYAML)
-
-	case model.BlueGreen:
-		// 蓝绿发布生成两个 Service：active 和 preview
-		activeSvcYAML, err := render.BlueGreen(manifest, "active")
-		if err != nil {
-			log.Fatalf("Service active failed: %v", err)
-		}
-		previewSvcYAML, err := render.BlueGreen(manifest, "preview")
-		if err != nil {
-			log.Fatalf("Service preview failed: %v", err)
-		}
-		fmt.Println("---")
-		fmt.Println(activeSvcYAML)
-		fmt.Println("---")
-		fmt.Println(previewSvcYAML)
-
+	case model.Canary, model.BlueGreen:
 		rolloutYAML, err := render.Rollout(manifest, env)
 		if err != nil {
 			log.Fatalf("Rollout failed: %v", err)
@@ -94,20 +76,30 @@ func main() {
 	}
 
 	// -----------------------------
-	// 3️⃣ 外网生成 VirtualService（仅 Canary / BlueGreen）
+	// 3️⃣ VirtualService & DestinationRule (仅 Canary / BlueGreen)
 	// -----------------------------
-	if manifest.Internet == model.External {
-		vsYAML, err := render.VirtualService(manifest)
-		if err != nil {
-			log.Fatalf("VirtualService failed: %v", err)
-		}
-		if vsYAML != "" {
-			fmt.Println("---")
-			fmt.Println(vsYAML)
-		}
+	vsYAML, err := render.VirtualService(manifest, env)
+	if err != nil {
+		log.Fatalf("VirtualService failed: %v", err)
+	}
+	vsYAML = strings.ReplaceAll(vsYAML, "status: {}\n", "")
+	if vsYAML != "" {
+		fmt.Println("---")
+		fmt.Println(vsYAML)
+	}
+
+	drYAML, err := render.DestinationRule(manifest, env)
+	if err != nil {
+		log.Fatalf("DestinationRule failed: %v", err)
+	}
+	drYAML = strings.ReplaceAll(drYAML, "status: {}\n", "")
+	if drYAML != "" {
+		fmt.Println("---")
+		fmt.Println(drYAML)
 	}
 }
 
+// FetchRelease 调用 DevFlow API 获取 Manifest
 func FetchRelease(api, manifestID string) (*model.Manifest, error) {
 	url := fmt.Sprintf("%s/api/v1/manifests/%s", api, manifestID)
 	resp, err := http.Get(url)

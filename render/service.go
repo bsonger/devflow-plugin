@@ -8,14 +8,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Service 根据 Release 渲染 Service YAML
+// Service 根据 Release 渲染 Service YAML（同一个 Service，BlueGreen / Canary / Normal 都用）
 func Service(m *model.Manifest) (string, error) {
 	if len(m.Service.Ports) == 0 {
 		return "", nil // 没有 service 配置，直接返回空
 	}
 
 	var ports []corev1.ServicePort
-
 	for _, p := range m.Service.Ports {
 		ports = append(ports, corev1.ServicePort{
 			Name:       p.Name,
@@ -31,7 +30,7 @@ func Service(m *model.Manifest) (string, error) {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: m.ApplicationName,
+			Name: m.ApplicationName, // ✅ 同一个 Service 名
 			Labels: map[string]string{
 				"app": m.ApplicationName,
 			},
@@ -39,6 +38,7 @@ func Service(m *model.Manifest) (string, error) {
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
 				"app": m.ApplicationName,
+				// role 不再用 Service 去区分
 			},
 			Ports: ports,
 			Type:  corev1.ServiceTypeClusterIP,
@@ -58,47 +58,4 @@ func intstrFromInt(i int) intstr.IntOrString {
 		Type:   intstr.Int,
 		IntVal: int32(i),
 	}
-}
-
-func BlueGreen(m *model.Manifest, role string) (string, error) {
-
-	name := m.ApplicationName + "-" + role
-
-	var ports []corev1.ServicePort
-	for _, p := range m.Service.Ports {
-		ports = append(ports, corev1.ServicePort{
-			Name:       p.Name,
-			Port:       int32(p.Port),
-			TargetPort: intstrFromInt(p.TargetPort),
-		})
-	}
-
-	svc := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			//Namespace: m.App.Namespace,
-			Labels: map[string]string{
-				"app":  m.ApplicationName,
-				"role": role,
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app":  m.ApplicationName,
-				"role": role,
-			},
-			Ports: ports,
-			Type:  corev1.ServiceTypeClusterIP,
-		},
-	}
-
-	out, err := yaml.Marshal(svc)
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
 }

@@ -20,9 +20,8 @@ func Rollout(m *model.Manifest, env string) (string, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: m.ApplicationName + "-" + env,
 			Labels: map[string]string{
-				"app":  m.ApplicationName,
-				"env":  env,
-				"type": string(m.Type),
+				"app": m.ApplicationName,
+				"env": env,
 			},
 		},
 		Spec: rolloutv1alpha1.RolloutSpec{
@@ -80,7 +79,7 @@ func buildCanaryStrategy(m *model.Manifest, env string) rolloutv1alpha1.RolloutS
 				Istio: &rolloutv1alpha1.IstioTrafficRouting{
 					VirtualService: &rolloutv1alpha1.IstioVirtualService{
 						Name:   m.ApplicationName,
-						Routes: []string{"primary"},
+						Routes: []string{m.ApplicationName},
 					},
 					DestinationRule: &rolloutv1alpha1.IstioDestinationRule{
 						Name:             m.ApplicationName,
@@ -94,7 +93,7 @@ func buildCanaryStrategy(m *model.Manifest, env string) rolloutv1alpha1.RolloutS
 }
 
 func buildBlueGreenStrategy(m *model.Manifest, env string) rolloutv1alpha1.RolloutStrategy {
-	activeSvc := m.ApplicationName + "-active"
+	activeSvc := m.ApplicationName
 	previewSvc := m.ApplicationName + "-preview"
 
 	autoPromote := false

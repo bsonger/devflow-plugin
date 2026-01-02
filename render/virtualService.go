@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"github.com/bsonger/devflow-common/model"
 	v1alpha3 "istio.io/api/networking/v1alpha3"
 	networkingv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -8,13 +9,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// VirtualService 根据 Manifest 生成 VirtualService YAML
-func VirtualService(m *model.Manifest) (string, error) {
-	// 内部流量不需要 VirtualService
-	if m.Internet == model.Internal {
+func VirtualService(m *model.Manifest, env string) (string, error) {
+	if m.Type == model.Normal && m.Internet == model.Internal {
 		return "", nil
 	}
-
 	vs := &networkingv1beta1.VirtualService{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "VirtualService",
@@ -24,18 +22,35 @@ func VirtualService(m *model.Manifest) (string, error) {
 			Name: m.ApplicationName,
 			Labels: map[string]string{
 				"app": m.ApplicationName,
-				"env": string(m.Internet),
-			},
-		},
-		Spec: v1alpha3.VirtualService{
-			Hosts: []string{m.ApplicationName},
-			Http: []*v1alpha3.HTTPRoute{
-				{
-					Route: buildHTTPRouteDestinations(m),
-				},
+				"env": env,
 			},
 		},
 	}
+
+	spec := v1alpha3.VirtualService{
+		Http: []*v1alpha3.HTTPRoute{
+			{
+				Name:  m.ApplicationName,
+				Route: buildHTTPRouteDestinations(m),
+			},
+		},
+	}
+
+	if m.Internet == model.External {
+		spec.Hosts = []string{
+			fmt.Sprintf("%s.bei.com", m.ApplicationName),
+			m.ApplicationName,
+		}
+		spec.Gateways = []string{
+			"istio-system/devflow-gateway",
+		}
+	} else {
+		spec.Hosts = []string{
+			m.ApplicationName,
+		}
+	}
+
+	vs.Spec = spec
 
 	yml, err := yaml.Marshal(vs)
 	if err != nil {
@@ -44,41 +59,48 @@ func VirtualService(m *model.Manifest) (string, error) {
 	return string(yml), nil
 }
 
-// buildHTTPRouteDestinations 构造流量路由
 func buildHTTPRouteDestinations(m *model.Manifest) []*v1alpha3.HTTPRouteDestination {
 	switch m.Type {
+
 	case model.Canary:
-		stableWeight, canaryWeight := 80, 20
-		// 可扩展：后续从 m.CanaryConfig 获取权重
+		// Canary 初始全部流量给 stable
 		return []*v1alpha3.HTTPRouteDestination{
 			{
 				Destination: &v1alpha3.Destination{
 					Host:   m.ApplicationName,
 					Subset: "stable",
 				},
-				Weight: int32(stableWeight),
+				Weight: 100,
 			},
 			{
 				Destination: &v1alpha3.Destination{
 					Host:   m.ApplicationName,
 					Subset: "canary",
 				},
-				Weight: int32(canaryWeight),
+				Weight: 0,
 			},
 		}
 
 	case model.BlueGreen:
-		activeSvc := m.ApplicationName + "-active"
+		// BlueGreen 使用同一个 Service，通过 subset 区分 blue/green
 		return []*v1alpha3.HTTPRouteDestination{
 			{
 				Destination: &v1alpha3.Destination{
-					Host: activeSvc,
+					Host:   m.ApplicationName,
+					Subset: "blue",
 				},
-				Weight: 100,
+				Weight: 100, // 初始全部流量给 active 蓝色
+			},
+			{
+				Destination: &v1alpha3.Destination{
+					Host:   m.ApplicationName,
+					Subset: "green",
+				},
+				Weight: 0,
 			},
 		}
 
-	default: // normal / rolling update
+	default: // normal / rolling
 		return []*v1alpha3.HTTPRouteDestination{
 			{
 				Destination: &v1alpha3.Destination{

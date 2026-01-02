@@ -14,7 +14,7 @@ const (
 
 func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 	envVars := buildEnvVars(m.Envs, env)
-	volumes, mounts := buildVolumes(m.ConfigMaps, env)
+	volumes, mounts := buildVolumes(m.ApplicationName, m.ConfigMaps, env)
 
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -43,13 +43,13 @@ func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 	}
 }
 
-func buildVolumes(cfgs []*model.ConfigMap, env string) ([]corev1.Volume, []corev1.VolumeMount) {
+func buildVolumes(appName string, cfgs []*model.ConfigMap, env string) ([]corev1.Volume, []corev1.VolumeMount) {
 	var volumes []corev1.Volume
 	var mounts []corev1.VolumeMount
 
 	for _, cfg := range cfgs {
 		// 可以根据 env 选择不同 config
-		cfgName := fmt.Sprintf("%s-%s", cfg.Name, env)
+		cfgName := fmt.Sprintf("%s-%s-%s", appName, cfg.Name, env)
 		volumes = append(volumes, corev1.Volume{
 			Name: cfgName,
 			VolumeSource: corev1.VolumeSource{
