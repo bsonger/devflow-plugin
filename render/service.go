@@ -28,8 +28,7 @@ func Service(m *model.Manifest) (string, error) {
 	// BlueGreen 额外生成 preview Service
 	if m.Type == model.BlueGreen {
 		previewName := m.ApplicationName + "-preview"
-		labels := map[string]string{"role": "preview"}
-		yml, err := buildServiceYAML(previewName, m.ApplicationName, labels, m.Service.Ports)
+		yml, err := buildServiceYAML(previewName, m.ApplicationName, nil, m.Service.Ports)
 		if err != nil {
 			return "", err
 		}
