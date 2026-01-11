@@ -9,10 +9,27 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// VirtualService 根据 manifest 生成 VS，只在有 HTTP port 时生成
 func VirtualService(m *model.Manifest, env string) (string, error) {
+	// 内部服务且非 Canary，不生成 VS
 	if m.Type != model.Canary && m.Internet == model.Internal {
 		return "", nil
 	}
+
+	// 找 HTTP port
+	var httpPort int32
+	for _, p := range m.Service.Ports {
+		if p.Name == "http" {
+			httpPort = int32(p.Port)
+			break
+		}
+	}
+
+	if httpPort == 0 {
+		// 没有 HTTP port，不生成 VS
+		return "", nil
+	}
+
 	vs := &networkingv1beta1.VirtualService{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "VirtualService",
@@ -31,11 +48,12 @@ func VirtualService(m *model.Manifest, env string) (string, error) {
 		Http: []*v1alpha3.HTTPRoute{
 			{
 				Name:  m.ApplicationName,
-				Route: buildHTTPRouteDestinations(m),
+				Route: buildHTTPRouteDestinations(m, httpPort),
 			},
 		},
 	}
 
+	// 外部服务设置 Host 和 Gateway
 	if m.Internet == model.External {
 		spec.Hosts = []string{
 			fmt.Sprintf("%s.bei.com", m.ApplicationName),
@@ -59,16 +77,18 @@ func VirtualService(m *model.Manifest, env string) (string, error) {
 	return string(yml), nil
 }
 
-func buildHTTPRouteDestinations(m *model.Manifest) []*v1alpha3.HTTPRouteDestination {
+// buildHTTPRouteDestinations 带 port number
+func buildHTTPRouteDestinations(m *model.Manifest, port int32) []*v1alpha3.HTTPRouteDestination {
 	switch m.Type {
-
 	case model.Canary:
-		// Canary 初始全部流量给 stable
 		return []*v1alpha3.HTTPRouteDestination{
 			{
 				Destination: &v1alpha3.Destination{
 					Host:   m.ApplicationName,
 					Subset: "stable",
+					Port: &v1alpha3.PortSelector{
+						Number: uint32(port),
+					},
 				},
 				Weight: 100,
 			},
@@ -76,16 +96,21 @@ func buildHTTPRouteDestinations(m *model.Manifest) []*v1alpha3.HTTPRouteDestinat
 				Destination: &v1alpha3.Destination{
 					Host:   m.ApplicationName,
 					Subset: "canary",
+					Port: &v1alpha3.PortSelector{
+						Number: uint32(port),
+					},
 				},
 				Weight: 0,
 			},
 		}
-
 	default: // normal / rolling
 		return []*v1alpha3.HTTPRouteDestination{
 			{
 				Destination: &v1alpha3.Destination{
 					Host: m.ApplicationName,
+					Port: &v1alpha3.PortSelector{
+						Number: uint32(port),
+					},
 				},
 				Weight: 100,
 			},
