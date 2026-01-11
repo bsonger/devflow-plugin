@@ -9,8 +9,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Service 根据 Release 渲染 Service YAML
-// 蓝绿部署会生成 active + preview 两个 Service，并合并成单一 YAML 输出
 func Service(m *model.Manifest) (string, error) {
 	if len(m.Service.Ports) == 0 {
 		return "", nil
@@ -18,17 +16,19 @@ func Service(m *model.Manifest) (string, error) {
 
 	out := ""
 
-	// 普通 / Canary / Rolling Update 使用同一个 Service
-	yml, err := buildServiceYAML(m.ApplicationName, m.ApplicationName, nil, m.Service.Ports)
+	metricsPort := findMetricsPort(m.Service.Ports)
+
+	// 普通 / Canary / Rolling Update
+	yml, err := buildServiceYAML(m.ApplicationName, m.ApplicationName, nil, m.Service.Ports, metricsPort, m.ApplicationName)
 	if err != nil {
 		return "", err
 	}
 	out += yml + "\n---\n"
 
-	// BlueGreen 额外生成 preview Service
+	// BlueGreen：preview Service（不加 metrics）
 	if m.Type == model.BlueGreen {
 		previewName := m.ApplicationName + "-preview"
-		yml, err := buildServiceYAML(previewName, m.ApplicationName, nil, m.Service.Ports)
+		yml, err := buildServiceYAML(previewName, m.ApplicationName, nil, m.Service.Ports, nil, "")
 		if err != nil {
 			return "", err
 		}
@@ -38,8 +38,8 @@ func Service(m *model.Manifest) (string, error) {
 	return out, nil
 }
 
-// buildServiceYAML 构建单个 Service 的 YAML
-func buildServiceYAML(name string, selectorApp string, extraSelector map[string]string, ports []model.Port) (string, error) {
+func buildServiceYAML(name string, selectorApp string, extraSelector map[string]string, ports []model.Port, metricsPort *model.Port, jobName string) (string, error) {
+
 	var servicePorts []corev1.ServicePort
 	for _, p := range ports {
 		servicePorts = append(servicePorts, corev1.ServicePort{
@@ -55,14 +55,33 @@ func buildServiceYAML(name string, selectorApp string, extraSelector map[string]
 		selector[k] = v
 	}
 
+	labels := map[string]string{}
+	for k, v := range selector {
+		labels[k] = v
+	}
+
+	annotations := map[string]string{}
+
+	// ✅ metrics annotation 只在 Service 上加
+	if metricsPort != nil {
+		labels["monitoring"] = "enabled"
+
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/path"] = "/metrics"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", metricsPort.Port)
+		annotations["prometheus.io/scheme"] = "http"
+		annotations["prometheus.io/job"] = jobName
+	}
+
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: selector,
+			Name:        name,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selector,
@@ -76,4 +95,12 @@ func buildServiceYAML(name string, selectorApp string, extraSelector map[string]
 		return "", fmt.Errorf("marshal service %s failed: %w", name, err)
 	}
 	return string(yml), nil
+}
+func findMetricsPort(ports []model.Port) *model.Port {
+	for _, p := range ports {
+		if p.Name == "metrics" {
+			return &p
+		}
+	}
+	return nil
 }
