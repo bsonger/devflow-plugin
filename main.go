@@ -16,7 +16,7 @@ func main() {
 	env := os.Getenv("PARAM_ENV")
 	devflowAddress := os.Getenv("PARAM_DEVFLOW_ADDRESS") // 修改名称
 	consulAddress := os.Getenv("PARAM_CONSUL_ADDRESS")   // 新增 Consul 地址
-	//manifestID := "695928c7c19ca4e41778f80f"
+	//manifestID := "69593d6d7376bd11efef7302"
 	//env := "prod"
 	//devflowAddress := "https://devflow.bei.com:32000"
 	//consulAddress := "https://consul.bei.com:30000"

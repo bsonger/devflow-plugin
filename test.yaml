@@ -1,0 +1,158 @@
+---
+apiVersion: v1
+data:
+  config.yaml: |-
+    server:
+      port: 8080
+    mongo:
+      uri: "mongodb://devflow:devflow@mongodb.database.svc.cluster.local:27017/devflow?authSource=devflow"
+      db: "devflow"
+    log:
+      level: "info"
+      format: "json"   # json | console
+    otel:
+      endpoint: "trace-collector.observability.svc.cluster.local:4317"
+      insecure: true   # 如果不启用 TLS
+      service_name: "devflow"
+    repo:
+      address: "https://github.com/bsonger/manifests.git"
+      path: "manifests"
+    consul:
+      address: http://consul-consul-server.consul.svc.cluster.local:8500
+      key: app/devflow.yaml
+kind: ConfigMap
+metadata:
+  labels:
+    app: devflow
+    env: prod
+  name: devflow-config-volume-prod
+
+---
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: devflow
+  name: devflow
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: devflow
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+---
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  labels:
+    app: devflow
+    env: prod
+  name: devflow-prod
+spec:
+  replicas: 5
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: devflow
+      env: prod
+  strategy:
+    canary:
+      steps:
+      - setWeight: 20
+      - pause:
+          duration: 30
+      - setWeight: 50
+      - pause:
+          duration: 60
+      - setWeight: 100
+      trafficRouting:
+        istio:
+          destinationRule:
+            canarySubsetName: canary
+            name: devflow
+            stableSubsetName: stable
+          virtualService:
+            name: devflow
+            routes:
+            - devflow
+  template:
+    metadata:
+      labels:
+        app: devflow
+        env: prod
+        type: canary
+    spec:
+      containers:
+      - env:
+        - name: Env
+          value: prod
+        image: registry.cn-hangzhou.aliyuncs.com/devflow/devflow:devflow2026010522173597
+        imagePullPolicy: IfNotPresent
+        name: devflow
+        resources: {}
+        volumeMounts:
+        - mountPath: /etc/devflow/config
+          name: devflow-config-volume-prod
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: devflow-config-volume-prod
+        name: devflow-config-volume-prod
+status:
+  blueGreen: {}
+  canary: {}
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  labels:
+    app: devflow
+    env: prod
+  name: devflow
+spec:
+  gateways:
+  - istio-system/devflow-gateway
+  hosts:
+  - devflow.bei.com
+  - devflow
+  http:
+  - name: devflow
+    route:
+    - destination:
+        host: devflow
+        subset: stable
+      weight: 100
+    - destination:
+        host: devflow
+        subset: canary
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  labels:
+    app: devflow
+    env: prod
+  name: devflow
+spec:
+  host: devflow
+  subsets:
+  - name: stable
+  - name: canary
+

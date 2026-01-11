@@ -16,13 +16,31 @@ func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 	envVars := buildEnvVars(m.Envs, env)
 	volumes, mounts := buildVolumes(m.ApplicationName, m.ConfigMaps, env)
 
+	labels := map[string]string{
+		"app":  m.ApplicationName,
+		"type": string(m.Type),
+		"env":  env,
+	}
+
+	annotations := map[string]string{}
+
+	// ⭐ 判断是否暴露 metrics
+	if metricsPort, ok := extractMetricsFromManifest(m); ok {
+		// 用于 ServiceMonitor / PodMonitor selector
+		labels["monitoring"] = "enabled"
+
+		// annotation-based scrape
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/path"] = "/metrics"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", metricsPort)
+		annotations["prometheus.io/scheme"] = "http"
+		annotations["prometheus.io/job"] = m.ApplicationName
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"app":  m.ApplicationName,
-				"type": string(m.Type),
-				"env":  env,
-			},
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -92,4 +110,17 @@ func buildEnvVars(envMap map[string][]model.EnvVar, env string) []corev1.EnvVar 
 	}
 
 	return envVars
+}
+
+func extractMetricsFromManifest(m *model.Manifest) (port int, ok bool) {
+	for _, p := range m.Service.Ports {
+		if p.Name == "metrics" {
+			// 优先用 targetPort
+			if p.TargetPort > 0 {
+				return p.TargetPort, true
+			}
+			return p.Port, true
+		}
+	}
+	return 0, false
 }
