@@ -13,7 +13,7 @@ const (
 )
 
 func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
-	envVars := buildEnvVars(m.Envs, env)
+	envVars := buildEnvVars(m.Envs, env, m.ApplicationName)
 	volumes, mounts := buildVolumes(m.ApplicationName, m.ConfigMaps, env)
 
 	return corev1.PodTemplateSpec{
@@ -72,16 +72,66 @@ func buildVolumes(appName string, cfgs []*model.ConfigMap, env string) ([]corev1
 	return volumes, mounts
 }
 
-func buildEnvVars(envMap map[string][]model.EnvVar, env string) []corev1.EnvVar {
+func buildEnvVars(envMap map[string][]model.EnvVar, env string, serviceName string) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
 
-	// 默认固定变量
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "Env",
-		Value: env,
-	})
+	// ========== 1️⃣ 固定业务环境变量 ==========
+	envVars = append(envVars,
+		corev1.EnvVar{
+			Name:  "ENV",
+			Value: env,
+		},
+		corev1.EnvVar{
+			Name:  "SERVICE_NAME",
+			Value: serviceName,
+		},
+	)
 
-	// 根据 env 选择对应的 EnvVar
+	// ========== 2️⃣ Kubernetes Downward API ==========
+	envVars = append(envVars,
+		corev1.EnvVar{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "POD_UID",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.uid",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "status.podIP",
+				},
+			},
+		},
+	)
+
+	// ========== 3️⃣ 按环境注入自定义变量 ==========
 	if envList, ok := envMap[env]; ok {
 		for _, e := range envList {
 			envVars = append(envVars, corev1.EnvVar{
