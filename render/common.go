@@ -16,6 +16,16 @@ func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 	envVars := buildEnvVars(m.Envs, env, m.ApplicationName)
 	volumes, mounts := buildVolumes(m.ApplicationName, m.ConfigMaps, env)
 
+	metricsPort := findMetricsPort(m.Service.Ports)
+	annotations := map[string]string{}
+	if metricsPort != nil {
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/path"] = "/metrics"
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", metricsPort.Port)
+		annotations["prometheus.io/scheme"] = "http"
+		annotations["prometheus.io/job"] = m.ApplicationName
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
@@ -23,6 +33,7 @@ func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 				"type": string(m.Type),
 				"env":  env,
 			},
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{

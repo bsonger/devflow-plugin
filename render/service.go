@@ -19,7 +19,7 @@ func Service(m *model.Manifest) (string, error) {
 	metricsPort := findMetricsPort(m.Service.Ports)
 
 	// 普通 / Canary / Rolling Update
-	yml, err := buildServiceYAML(m.ApplicationName, m.ApplicationName, nil, m.Service.Ports, metricsPort, m.ApplicationName)
+	yml, err := buildServiceYAML(m.ApplicationName, m.ApplicationName, nil, m.Service.Ports, metricsPort)
 	if err != nil {
 		return "", err
 	}
@@ -28,7 +28,7 @@ func Service(m *model.Manifest) (string, error) {
 	// BlueGreen：preview Service（不加 metrics）
 	if m.Type == model.BlueGreen {
 		previewName := m.ApplicationName + "-preview"
-		yml, err := buildServiceYAML(previewName, m.ApplicationName, nil, m.Service.Ports, nil, "")
+		yml, err := buildServiceYAML(previewName, m.ApplicationName, nil, m.Service.Ports, nil)
 		if err != nil {
 			return "", err
 		}
@@ -38,7 +38,7 @@ func Service(m *model.Manifest) (string, error) {
 	return out, nil
 }
 
-func buildServiceYAML(name string, selectorApp string, extraSelector map[string]string, ports []model.Port, metricsPort *model.Port, jobName string) (string, error) {
+func buildServiceYAML(name string, selectorApp string, extraSelector map[string]string, ports []model.Port, metricsPort *model.Port) (string, error) {
 
 	var servicePorts []corev1.ServicePort
 	for _, p := range ports {
@@ -65,12 +65,6 @@ func buildServiceYAML(name string, selectorApp string, extraSelector map[string]
 	// ✅ metrics annotation 只在 Service 上加
 	if metricsPort != nil {
 		labels["monitoring"] = "enabled"
-
-		annotations["prometheus.io/scrape"] = "true"
-		annotations["prometheus.io/path"] = "/metrics"
-		annotations["prometheus.io/port"] = fmt.Sprintf("%d", metricsPort.Port)
-		annotations["prometheus.io/scheme"] = "http"
-		annotations["prometheus.io/job"] = jobName
 	}
 
 	svc := &corev1.Service{
