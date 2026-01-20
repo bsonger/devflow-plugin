@@ -1,6 +1,6 @@
 module github.com/bsonger/devflow-plugin
 
-go 1.25.4
+go 1.25.6
 
 require (
 	github.com/argoproj/argo-rollouts v1.8.3
