@@ -22,7 +22,7 @@ RUN chmod +x devflow-plugin
 # -----------------------------
 # Stage 2: Sidecar 镜像
 # -----------------------------
-FROM quay.io/argoproj/argocd:v2.12.4
+FROM quay.io/argoproj/argocd:v3.2.5
 
 # 拷贝插件二进制
 COPY --from=builder /workspace/devflow-plugin /home/argocd/devflow-plugin
