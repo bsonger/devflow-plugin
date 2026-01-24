@@ -20,6 +20,8 @@ data:
     consul:
       address: http://consul-consul-server.consul.svc.cluster.local:8500
       key: app/devflow.yaml
+    pyroscope: "http://pyroscope-distributor.monitoring.svc.cluster.local:4040"
+    env: prod
 kind: ConfigMap
 metadata:
   labels:
@@ -35,6 +37,7 @@ kind: Service
 metadata:
   labels:
     app: devflow
+    monitoring: enabled
   name: devflow
 spec:
   ports:
@@ -42,6 +45,10 @@ spec:
     port: 8080
     protocol: TCP
     targetPort: 8080
+  - name: metrics
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
   selector:
     app: devflow
   type: ClusterIP
@@ -87,6 +94,12 @@ spec:
             - devflow
   template:
     metadata:
+      annotations:
+        prometheus.io/job: devflow
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9090"
+        prometheus.io/scheme: http
+        prometheus.io/scrape: "true"
       labels:
         app: devflow
         env: prod
@@ -94,9 +107,31 @@ spec:
     spec:
       containers:
       - env:
-        - name: Env
+        - name: ENV
           value: prod
-        image: registry.cn-hangzhou.aliyuncs.com/devflow/devflow:devflow2026010522173597
+        - name: SERVICE_NAME
+          value: devflow
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        image: registry.cn-hangzhou.aliyuncs.com/devflow/devflow@sha256:8d827adbbcb2388cffb07fbe621810f1b24a1ca036529bece7f30708c201f727
         imagePullPolicy: IfNotPresent
         name: devflow
         resources: {}
@@ -136,10 +171,14 @@ spec:
     route:
     - destination:
         host: devflow
+        port:
+          number: 8080
         subset: stable
       weight: 100
     - destination:
         host: devflow
+        port:
+          number: 8080
         subset: canary
 
 ---

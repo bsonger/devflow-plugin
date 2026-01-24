@@ -7,19 +7,18 @@ import (
 	"github.com/bsonger/devflow-plugin/render"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 )
 
 func main() {
-	manifestID := os.Getenv("PARAM_MANIFEST_ID")
-	env := os.Getenv("PARAM_ENV")
-	devflowAddress := os.Getenv("PARAM_DEVFLOW_ADDRESS") // 修改名称
-	consulAddress := os.Getenv("PARAM_CONSUL_ADDRESS")   // 新增 Consul 地址
-	//manifestID := "69593d6d7376bd11efef7302"
-	//env := "prod"
-	//devflowAddress := "https://devflow.bei.com:32000"
-	//consulAddress := "https://consul.bei.com:30000"
+	//manifestID := os.Getenv("PARAM_MANIFEST_ID")
+	//env := os.Getenv("PARAM_ENV")
+	//devflowAddress := os.Getenv("PARAM_DEVFLOW_ADDRESS") // 修改名称
+	//consulAddress := os.Getenv("PARAM_CONSUL_ADDRESS")   // 新增 Consul 地址
+	manifestID := "697452200cb9977fda9c31ec"
+	env := "prod"
+	devflowAddress := "https://devflow.bei.com"
+	consulAddress := "https://consul.bei.com"
 
 	log.Printf("manifestID=%s, env=%s, devflowAddress=%s, consulAddress=%s\n",
 		manifestID, env, devflowAddress, consulAddress)

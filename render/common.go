@@ -39,7 +39,7 @@ func buildPodTemplate(m *model.Manifest, env string) corev1.PodTemplateSpec {
 			Containers: []corev1.Container{
 				{
 					Name:            m.ApplicationName,
-					Image:           Repository + m.ApplicationName + ":" + m.Name,
+					Image:           Repository + m.ApplicationName + "@" + m.Digest,
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					VolumeMounts:    mounts,

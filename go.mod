@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/argoproj/argo-rollouts v1.8.3
-	github.com/bsonger/devflow-common v0.0.0-20251231152833-7e74f71dc7cb
+	github.com/bsonger/devflow-common v0.0.0-20260124043258-5df152b471c3
 	github.com/hashicorp/consul/api v1.33.0
 	istio.io/api v1.28.2
 	istio.io/client-go v1.28.2
