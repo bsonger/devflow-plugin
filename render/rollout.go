@@ -1,6 +1,8 @@
 package render
 
 import (
+	"os"
+
 	"github.com/bsonger/devflow-common/model"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -35,6 +37,9 @@ func Rollout(m *model.Manifest, env string) (string, error) {
 			},
 			Template: buildPodTemplate(m, env),
 		},
+	}
+	if jobID := os.Getenv("PARAM_JOB_ID"); jobID != "" {
+		rollout.ObjectMeta.Labels["job-id"] = jobID
 	}
 
 	// 根据 ReleaseType 选择 Rollout Strategy

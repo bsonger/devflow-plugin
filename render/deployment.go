@@ -1,6 +1,8 @@
 package render
 
 import (
+	"os"
+
 	"github.com/bsonger/devflow-common/model"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +33,9 @@ func Deployment(m *model.Manifest, env string) (string, error) {
 			},
 			Template: buildPodTemplate(m, env),
 		},
+	}
+	if jobID := os.Getenv("PARAM_JOB_ID"); jobID != "" {
+		deploy.ObjectMeta.Labels["job-id"] = jobID
 	}
 
 	yml, err := yaml.Marshal(deploy)
